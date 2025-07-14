@@ -33,7 +33,7 @@ def extract_userdata(username: str):
     """
 
     print(f"extracting userprofile of {username}")
-    
+
     url: str = f"https://www.reddit.com/user/{username}/"
 
     try:
@@ -45,13 +45,14 @@ def extract_userdata(username: str):
         return str(data)
     except Exception as e:
         return f"Failed to fetch {username} data with error {e}"
-    
+
 
 def build_prompt(username):
     userdata = extract_userdata(username=username)
-    print(f"prompt building")
+    print("prompt building")
     return f"""
-Analyze the user and following Reddit posts and comments by user '{username}' and build a detailed user persona.
+Analyze the user and following Reddit posts and
+comments by user '{username}' and build a detailed user persona.
 
 Include:
 - Age range
@@ -73,14 +74,13 @@ Text:
 """
 
 
-
-def get_llm_analyzed(prompt: str, model :str = "deepseek/deepseek-r1-0528"):
+def get_llm_analyzed(prompt: str, model: str = "deepseek/deepseek-r1-0528"):
     """
-    Purpose: communicates with model available on openrouter 
+    Purpose: communicates with model available on openrouter
     Args: prompt (str), model (str): deepseek/deepseek-r1-0528
     Returns: llm generated user persona
     """
-    print(f"processing user information in llm, it might take some time")
+    print("processing user information in llm, it might take some time")
 
     url = "https://openrouter.ai/api/v1/chat/completions"
 
@@ -94,7 +94,10 @@ def get_llm_analyzed(prompt: str, model :str = "deepseek/deepseek-r1-0528"):
     payload = {
         "model": model,
         "messages": [
-            {"role": "system", "content": "You're an expert in user behavior profiling."},
+            {
+                "role": "system",
+                "content": "You're an expert in user behavior profiling."
+            },
             {"role": "user", "content": prompt}
         ]
     }
@@ -103,39 +106,42 @@ def get_llm_analyzed(prompt: str, model :str = "deepseek/deepseek-r1-0528"):
     response.raise_for_status()
     return response.json()["choices"][0]["message"]["content"]
 
+
 def create_file(data: str, username: str):
     """
     Purpose: Creates txt file with by username and adds data to it
     Args: data (str), username (str)
     """
-    
+
     txtfilename = f"out/persona_{username}.txt"
     mdfilename = f"out/persona_{username}.md"
-    
+
     def write_txt_file():
         with open(txtfilename, "w", encoding="utf-8") as file:
             file.write(data)
         print(f"{txtfilename} created successfully")
-    
+
     def write_md_file():
         with open(mdfilename, "w", encoding="utf-8") as file:
             file.write(data)
         print(f"{mdfilename} created successfully")
-    
+
     txt_thread = threading.Thread(target=write_txt_file)
     md_thread = threading.Thread(target=write_md_file)
-    
+
     txt_thread.start()
     md_thread.start()
-    
+
     txt_thread.join()
     md_thread.join()
 
     print(f"created {txtfilename} and {mdfilename} for you")
 
+
 def main():
     parse = argparse.ArgumentParser(description="Reddit username")
-    parse.add_argument("--username", required=True, help="Provide reddit username to extract data")
+    parse.add_argument("--username", required=True,
+                       help="Provide reddit username to extract data")
 
     args = parse.parse_args()
     username = args.username
@@ -143,7 +149,7 @@ def main():
     prompt = build_prompt(username=username)
 
     persona = get_llm_analyzed(prompt=prompt)
-    
+
     create_file(data=persona, username=username)
 
 
