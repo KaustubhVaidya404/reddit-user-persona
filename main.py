@@ -166,7 +166,7 @@ def build_prompt(username):
     userdata = extract_userdata(username=username)
     print("prompt building")
     return f"""
-Analyze the following Reddit user data for '{username}' and build a comprehensive user persona.
+Analyze the following Reddit user data for '{username}' and build a comprehensive user persona in plane readable text.
 The data includes their profile activity, submitted posts, and comments.
 
 Please provide detailed analysis including:
