@@ -1,0 +1,8 @@
+# This is a .gitignore file for a Python project using a virtual environment
+# It ignores files and directories that are commonly not needed in version control.
+Include
+Lib
+Scripts
+pyvenv.cfg
+__pycache__
+
