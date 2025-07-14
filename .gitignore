@@ -6,3 +6,8 @@ Scripts
 pyvenv.cfg
 __pycache__
 
+# Ignore environment files
+.env
+
+# Ignore output directories
+out
