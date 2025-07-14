@@ -23,14 +23,14 @@ headers = {
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 
-def extract_userdata(username: str):
+def extract_user_posts(username: str):
     """
-    Purpose: Scraps limited userdata from https://www.reddit.com/user/{username}/
+    Purpose: Scrapes user's submitted posts from /submitted/ page
     Args: username (str)
-    Returns: scraped data (str) - limited to avoid token limits
+    Returns: scraped posts data (str)
     """
-    print(f"extracting userprofile of {username}")
-    url: str = f"https://www.reddit.com/user/{username}/"
+    print(f"extracting posts of {username}")
+    url = f"https://www.reddit.com/user/{username}/submitted/"
 
     try:
         result = requests.get(url, headers=headers)
@@ -38,57 +38,152 @@ def extract_userdata(username: str):
 
         posts = soup.find_all("div", class_="subgrid-container")
 
+        post_content = []
+        total_chars = 0
+
+        for i, post in enumerate(posts):
+            if i >= 10:
+                break
+
+            text = post.get_text(strip=True)
+            if text and len(text) > 50:
+                cleaned_text = ' '.join(text.split())[:400]
+                post_content.append(f"POST: {cleaned_text}")
+                total_chars += len(cleaned_text)
+
+                if total_chars > 4000:
+                    break
+
+        result_text = '\n---\n'.join(post_content)
+        print(f"Extracted {len(result_text)} characters from {len(post_content)} posts")
+        return result_text
+
+    except Exception as e:
+        print(f"Failed to fetch posts: {e}")
+        return ""
+
+
+def extract_user_comments(username: str):
+    """
+    Purpose: Scrapes user's comments from /comments/ page
+    Args: username (str)
+    Returns: scraped comments data (str)
+    """
+    print(f"extracting comments of {username}")
+    url = f"https://www.reddit.com/user/{username}/comments/"
+
+    try:
+        result = requests.get(url, headers=headers)
+        soup = BeautifulSoup(result.text, "html.parser")
+        
+        comments = soup.find_all("div", class_="subgrid-container")
+
+        comment_content = []
+        total_chars = 0
+
+        for i, comment in enumerate(comments):
+            if i >= 15:
+                break
+
+            text = comment.get_text(strip=True)
+            if text and len(text) > 30:
+                cleaned_text = ' '.join(text.split())[:300]
+                comment_content.append(f"COMMENT: {cleaned_text}")
+                total_chars += len(cleaned_text)
+   
+                if total_chars > 4000:
+                    break
+
+        result_text = '\n---\n'.join(comment_content)
+        print(f"Extracted {len(result_text)} characters from {len(comment_content)} comments")
+        return result_text
+   
+    except Exception as e:
+        print(f"Failed to fetch comments: {e}")
+        return ""
+
+
+def extract_userdata(username: str):
+    """
+    Purpose: Scrapes combined user data from profile, posts, and comments
+    Args: username (str)
+    Returns: scraped data (str) - limited to avoid token limits
+    """
+    print(f"extracting complete profile of {username}")
+
+    profile_url = f"https://www.reddit.com/user/{username}/"
+    profile_data = ""
+
+    try:
+        result = requests.get(profile_url, headers=headers)
+        soup = BeautifulSoup(result.text, "html.parser")
+
+        posts = soup.find_all("div", class_="subgrid-container")
         text_content = []
         total_chars = 0
 
         for i, post in enumerate(posts):
-            if i >= 20:
+            if i >= 10:  # Limit profile data
                 break
 
             text = post.get_text(strip=True)
             if text and len(text) > 30:
-                cleaned_text = ' '.join(text.split())[:300]
-                text_content.append(cleaned_text)
+                cleaned_text = ' '.join(text.split())[:250]
+                text_content.append(f"PROFILE: {cleaned_text}")
                 total_chars += len(cleaned_text)
 
-                if total_chars > 8000:
+                if total_chars > 2500:
                     break
 
-        result_text = '\n---\n'.join(text_content)
-
-        if len(result_text) > 10000:
-            result_text = result_text[:10000] + "\n[Content truncated for token limits]"
-
-        print(f"Extracted {len(result_text)} characters from {len(text_content)} posts")
-
-        with open("test.txt", "w", encoding="utf-8") as f:
-            f.write(result_text)
-
-        return result_text
-
+        profile_data = '\n---\n'.join(text_content)
+    
     except Exception as e:
-        return f"Failed to fetch {username} data with error {e}"
+        print(f"Failed to fetch profile: {e}")
+        profile_data = ""
+
+    posts_data = extract_user_posts(username)
+    comments_data = extract_user_comments(username)
+
+    all_data = []
+    if profile_data:
+        all_data.append(f"=== PROFILE DATA ===\n{profile_data}")
+    if posts_data:
+        all_data.append(f"=== SUBMITTED POSTS ===\n{posts_data}")
+    if comments_data:
+        all_data.append(f"=== COMMENTS ===\n{comments_data}")
+
+    combined_data = '\n\n'.join(all_data)
+
+    if len(combined_data) > 12000:
+        combined_data = combined_data[:12000] + "\n[Content truncated for token limits]"
+
+    print(f"Total extracted: {len(combined_data)} characters")
+  
+    return combined_data
 
 
 def build_prompt(username):
     userdata = extract_userdata(username=username)
     print("prompt building")
     return f"""
-Analyze the user and following Reddit posts and
-comments by user '{username}' and build a detailed user persona.
+Analyze the following Reddit user data for '{username}' and build a comprehensive user persona.
+The data includes their profile activity, submitted posts, and comments.
 
-Include:
-- Age range
-- Gender
-- Occupation
-- Interests
-- Personality traits
+Please provide detailed analysis including:
+- Age range (estimate based on language, interests, references)
+- Gender (if determinable from content)
+- Occupation/Education level
+- Interests and hobbies
+- Personality traits and behavioral patterns
 - Political or philosophical leanings
-- Writing style or tone
-- Preferred subreddits
-- Other relevant characteristics
+- Writing style and communication patterns
+- Preferred subreddits and communities
+- Social behaviors and interaction style
+- Values and motivations
+- Potential pain points or frustrations
+- Goals and aspirations (if evident)
 
-Text:
+User Data:
 {userdata}
 """
 
