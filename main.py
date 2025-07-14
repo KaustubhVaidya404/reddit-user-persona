@@ -41,7 +41,8 @@ def extract_userdata(username: str):
 
         soup = BeautifulSoup(result.text, "html.parser")
         data = soup.find_all("div", class_="subgrid-container")
-
+        with open("test.txt", "w") as f:
+            f.write(str(data))
         return str(data)
     except Exception as e:
         return f"Failed to fetch {username} data with error {e}"
@@ -63,10 +64,6 @@ Include:
 - Political or philosophical leanings
 - Writing style or tone
 - Preferred subreddits
-- Behaviour and habbits
-- Frustrations
-- Goals
-- Motivations
 - Other relevant characteristics
 
 Text:
@@ -80,6 +77,9 @@ def get_llm_analyzed(prompt: str, model: str = "deepseek/deepseek-r1-0528"):
     Args: prompt (str), model (str): deepseek/deepseek-r1-0528
     Returns: llm generated user persona
     """
+    if not OPENROUTER_API_KEY:
+        return "Error: OPENROUTER_API_KEY not found in environment variables"
+    
     print("processing user information in llm, it might take some time")
 
     url = "https://openrouter.ai/api/v1/chat/completions"
@@ -87,9 +87,12 @@ def get_llm_analyzed(prompt: str, model: str = "deepseek/deepseek-r1-0528"):
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
-        "HTTP-Referer": "http://localhost",
+        "HTTP-Referer": "http://localhost:3000",
         "X-Title": "RedditPersonaBuilder"
     }
+
+    if not model:
+        model = "deepseek/deepseek-r1-0528"
 
     payload = {
         "model": model,
@@ -99,12 +102,25 @@ def get_llm_analyzed(prompt: str, model: str = "deepseek/deepseek-r1-0528"):
                 "content": "You're an expert in user behavior profiling."
             },
             {"role": "user", "content": prompt}
-        ]
+        ],
+        "max_tokens": 2000,
+        "temperature": 0.7
     }
 
-    response = httpx.post(url, headers=headers, json=payload)
-    response.raise_for_status()
-    return response.json()["choices"][0]["message"]["content"]
+    try:
+        response = httpx.post(url, headers=headers, json=payload, timeout=60.0)
+        response.raise_for_status()
+        return response.json()["choices"][0]["message"]["content"]
+    except httpx.HTTPStatusError as e:
+        print(f"HTTP Status Error: {e.response.status_code}")
+        print(f"Response text: {e.response.text}")
+        return f"API Error: {e.response.status_code} - {e.response.text}"
+    except httpx.RequestError as e:
+        print(f"Request Error: {e}")
+        return f"Request failed: {e}"
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+        return f"Unexpected error: {e}"
 
 
 def create_file(data: str, username: str):
@@ -112,6 +128,8 @@ def create_file(data: str, username: str):
     Purpose: Creates txt file with by username and adds data to it
     Args: data (str), username (str)
     """
+
+    os.makedirs("out", exist_ok=True)
 
     txtfilename = f"out/persona_{username}.txt"
     mdfilename = f"out/persona_{username}.md"
@@ -139,18 +157,31 @@ def create_file(data: str, username: str):
 
 
 def main():
-    parse = argparse.ArgumentParser(description="Reddit username")
+    if not OPENROUTER_API_KEY:
+        print("Error: OPENROUTER_API_KEY not found!")
+        print("Please check your .env file contains: OPENROUTER_API_KEY=your_key_here")
+        return
+
+    parse = argparse.ArgumentParser(description="Reddit username and Optional OpenRouter model")
     parse.add_argument("--username", required=True,
                        help="Provide reddit username to extract data")
+    parse.add_argument("--model", required=False, default="deepseek/deepseek-r1-0528",
+                       help="Provide OpenRouter model, default - deepseek/deepseek-r1-0528")
 
     args = parse.parse_args()
     username = args.username
+    model = args.model
 
     prompt = build_prompt(username=username)
+    
+    print(f"Prompt length: {len(prompt)} characters")
 
-    persona = get_llm_analyzed(prompt=prompt)
-
-    create_file(data=persona, username=username)
+    persona = get_llm_analyzed(prompt=prompt, model=model)
+    
+    if persona and not persona.startswith("Error:") and not persona.startswith("API Error:"):
+        create_file(data=persona, username=username)
+    else:
+        print(f"Failed to generate persona: {persona}")
 
 
 if __name__ == "__main__":
